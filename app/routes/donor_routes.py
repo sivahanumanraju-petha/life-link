@@ -1,46 +1,38 @@
 
-import re
-from fastapi import APIRouter, HTTPException, Depends, Query
-from ..models import DonorCreate, DonorOut
-from app.database import db
+from fastapi import APIRouter, HTTPException
+from ..models import EmergencyRequestCreate
+from ..database import db
+from ..utils import blood_compatible
 from bson import ObjectId
-from typing import List
-from ..utils import haversine_km, blood_compatible
 
-router = APIRouter(prefix="/donors", tags=["donors"])
+router = APIRouter(prefix="/requests", tags=["requests"])
 
 @router.post("/", response_model=dict)
-async def create_donor(payload: DonorCreate):
+async def create_request(payload: EmergencyRequestCreate):
     doc = {
-        "name": payload.name,
-        "email": payload.email,
-        "phone": payload.phone,
-        "blood_type": payload.blood_type,
-        "last_donated": payload.last_donated,
-        "available": payload.available
+        "needed_blood_type": payload.needed_blood_type,
+        "units": payload.units,
+        "note": payload.note,
+        "created_at": __import__("datetime").datetime.utcnow()
     }
-    res = await db.donors.insert_one(doc)
-    return {"id": str(res.inserted_id)}
+    res = await db.requests.insert_one(doc)
 
-@router.get("/search", response_model=List[dict])
-async def search_donors(blood_type:str = Query(..., description="e.g. A+, O-, B+")):
-    try:
-        blood_type = blood_type.strip().upper()
-        safe_blood_type = re.escape(blood_type)
-        cursor = db.donors.find({
-            "blood_type": {"$regex": f"^{safe_blood_type}$", "$options": "i"}
+    # Find best matches (simple scoring)
+    cursor = db.donors.find({"available": True})
+    matches = []
+    async for donor in cursor:
+        donor_bt = donor.get("blood_type")
+        if not blood_compatible(payload.needed_blood_type, donor_bt):
+            continue
+        # simple: closer is higher score
+        matches.append({
+            "donor_id": str(donor["_id"]),
+            "name": donor["name"],
+            "email": donor["email"],
+            "phone": donor.get("phone"),
+            "blood_type": donor_bt,
         })
-
-        results = []
-        async for doc in cursor:
-            results.append({
-            "id": str(doc["_id"]),
-            "name": doc["name"],
-            "email": doc["email"],
-            "phone": doc.get("phone"),
-            "blood_type": doc["blood_type"],
-            "available": doc.get("available")
-        })
-        return results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # sort best first
+    matches.sort(key=lambda x: 0, reverse=True)
+    # Optionally: notify top N donors (email/sms) - left as TODO
+    return {"request_id": str(res.inserted_id), "matches": matches[:10]}
