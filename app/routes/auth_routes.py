@@ -4,7 +4,7 @@ from datetime import timedelta
 from bson import ObjectId
 
 from ..models import UserCreate, UserOut
-from ..database import db
+from ..database import user_collection
 from auth import hash_password, verify_password, create_access_token
 from ..config import ACCESS_TOKEN_EXPIRE_MINUTES
 
@@ -18,7 +18,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 @router.post("/register", response_model=UserOut)
 async def register(user: UserCreate):
     # Check if user exists
-    existing = await db.users.find_one({"email": user.email})
+    existing = await user_collection.find_one({"email": user.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -29,7 +29,7 @@ async def register(user: UserCreate):
         "email": user.email,
         "password": hashed_pw,
     }
-    res = await db.users.insert_one(user_doc)
+    res = await user_collection.insert_one(user_doc)
 
     return UserOut(
         id=str(res.inserted_id),
@@ -43,7 +43,7 @@ async def register(user: UserCreate):
 @router.post("/login")
 async def login(user: UserCreate):
     # Find user
-    db_user = await db.users.find_one({"email": user.email})
+    db_user = await user_collection.find_one({"email": user.email})
     if not db_user or not verify_password(user.password, db_user["password"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
