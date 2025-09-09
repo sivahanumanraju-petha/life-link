@@ -5,11 +5,7 @@ load_dotenv()
 from motor.motor_asyncio import AsyncIOMotorClient
 
 MONGO_URI = "mongodb+srv://kingshiva6622:Zxcvbnm123@resumestore.e6ihl22.mongodb.net/?retryWrites=true&w=majority&appName=resumestore"
-DB_NAME = "lifelink"
-
-client = AsyncIOMotorClient(MONGO_URI)
-db = client[DB_NAME]
-
+DB_NAME = "life"
 
 client = AsyncIOMotorClient(MONGO_URI)
 db = client[DB_NAME]
