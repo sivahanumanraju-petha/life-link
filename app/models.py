@@ -1,6 +1,6 @@
 
 from pydantic import BaseModel, EmailStr, Field, validator
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime
 
 class UserCreate(BaseModel):
@@ -18,11 +18,8 @@ class DonorCreate(BaseModel):
     email: EmailStr
     phone: Optional[str]
     blood_type: str
-    latitude: float
-    longitude: float
-    last_donated: Optional[datetime] = None
+    last_donated: str
     available: bool = True
-
     @validator("blood_type")
     def uppercase_blood(cls, v):
         return v.upper()
@@ -30,17 +27,14 @@ class DonorCreate(BaseModel):
 class DonorOut(BaseModel):
     id: str
     name: str
-    email: EmailStr
-    phone: Optional[str]
+    email: str
+    phone: str
     blood_type: str
-    location: dict
-    last_donated: Optional[datetime]
-    available: bool
+    last_donated: str  # keep as string instead of date
+    available: Union[bool, str]  # accept both
 
 class EmergencyRequestCreate(BaseModel):
     needed_blood_type: str
-    latitude: float
-    longitude: float
     units: int = 1
     note: Optional[str]
 
