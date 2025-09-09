@@ -1,7 +1,8 @@
 
+import re
 from fastapi import APIRouter, HTTPException, Depends, Query
 from ..models import DonorCreate, DonorOut
-from ..database import db
+from app.database import db
 from bson import ObjectId
 from typing import List
 from ..utils import haversine_km, blood_compatible
@@ -15,7 +16,6 @@ async def create_donor(payload: DonorCreate):
         "email": payload.email,
         "phone": payload.phone,
         "blood_type": payload.blood_type,
-        "location": {"type": "Point", "coordinates": [payload.longitude, payload.latitude]},
         "last_donated": payload.last_donated,
         "available": payload.available
     }
@@ -23,34 +23,24 @@ async def create_donor(payload: DonorCreate):
     return {"id": str(res.inserted_id)}
 
 @router.get("/search", response_model=List[dict])
-async def search_donors(blood_type: str = Query(...), lat: float = Query(...), lon: float = Query(...), max_km: float = 10):
-    # Try geo query (requires 2dsphere index)
+async def search_donors(blood_type:str = Query(..., description="e.g. A+, O-, B+")):
     try:
-        # Convert km to meters for Mongo geoNear
+        blood_type = blood_type.strip().upper()
+        safe_blood_type = re.escape(blood_type)
         cursor = db.donors.find({
-            "blood_type": {"$in": [blood_type.upper(), "O-"]},
-            "available": True,
-            "location": {
-                "$near": {
-                    "$geometry": {"type": "Point", "coordinates": [lon, lat]},
-                    "$maxDistance": int(max_km * 1000)
-                }
-            }
-        }).limit(50)
+            "blood_type": {"$regex": f"^{safe_blood_type}$", "$options": "i"}
+        })
+
         results = []
         async for doc in cursor:
-            # compute distance fallback if needed
-            coords = doc["location"]["coordinates"]
-            dist_km = haversine_km(lat, lon, coords[1], coords[0])
             results.append({
-                "id": str(doc["_id"]),
-                "name": doc["name"],
-                "email": doc["email"],
-                "phone": doc.get("phone"),
-                "blood_type": doc["blood_type"],
-                "distance_km": round(dist_km, 2),
-                "available": doc.get("available", True)
-            })
+            "id": str(doc["_id"]),
+            "name": doc["name"],
+            "email": doc["email"],
+            "phone": doc.get("phone"),
+            "blood_type": doc["blood_type"],
+            "available": doc.get("available")
+        })
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
